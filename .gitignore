@@ -18,6 +18,7 @@ Thumbs.db
 tmp/
 coverage/
 .nyc_output/
+*.tsbuildinfo
 
 # Node
 node_modules/

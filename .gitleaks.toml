@@ -1,0 +1,8 @@
+[allowlist]
+description = "Generated dependency symbols and non-secret local storage key names"
+paths = [
+  '''docs/assets/libsodium-wrappers-.*\.js$'''
+]
+regexes = [
+  '''co-parent-vault\.encrypted-vault\.v1'''
+]

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+npm run lint
+npm run fmt:check
+npx tsc -b --pretty false
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --verbose --config .gitleaks.toml
+else
+  echo "gitleaks is not installed; skipping local secret scan"
+fi

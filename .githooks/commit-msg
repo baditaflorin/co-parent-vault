@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file="$1"
+first_line="$(head -n 1 "$msg_file")"
+
+if [[ ! "$first_line" =~ ^(feat|fix|docs|chore|refactor|test|ops|data)(\([a-z0-9._-]+\))?:\ .+ ]]; then
+  echo "Commit message must use Conventional Commits"
+  echo "Example: feat: add sealed event invites"
+  exit 1
+fi
