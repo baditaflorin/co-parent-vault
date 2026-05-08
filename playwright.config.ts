@@ -5,13 +5,13 @@ export default defineConfig({
   timeout: 60_000,
   fullyParallel: true,
   use: {
-    baseURL: "http://127.0.0.1:4173/co-parent-vault/",
+    baseURL: "http://127.0.0.1:4317/co-parent-vault/",
     trace: "retain-on-failure"
   },
   webServer: {
-    command: "npm run preview -- --port 4173",
-    url: "http://127.0.0.1:4173/co-parent-vault/",
-    reuseExistingServer: !process.env.CI,
+    command: "npm run preview -- --port 4317 --strictPort",
+    url: "http://127.0.0.1:4317/co-parent-vault/",
+    reuseExistingServer: false,
     timeout: 60_000
   },
   projects: [

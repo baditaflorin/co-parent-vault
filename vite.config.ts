@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
@@ -11,6 +11,10 @@ const packageJson = JSON.parse(
 };
 
 function gitCommit(): string {
+  if (existsSync(".build-commit")) {
+    return readFileSync(".build-commit", "utf8").trim();
+  }
+
   try {
     return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
   } catch {
