@@ -3,7 +3,7 @@
   "minDrafts": 1,
   "first": {
     "title": "Therapy appointment",
-    "confidence": "medium",
+    "confidence": "high",
     "timezone": "America/New_York"
   },
   "mustWarnings": ["Organizer or attendee metadata preserved as notes."]

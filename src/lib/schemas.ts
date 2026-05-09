@@ -2,6 +2,16 @@ import { z } from "zod";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
+export const ConfidenceLevelSchema = z.enum(["high", "medium", "low"]);
+
+export const InferenceMetaSchema = z.object({
+  level: ConfidenceLevelSchema,
+  score: z.number().min(0).max(1),
+  reasons: z.array(z.string()),
+  warnings: z.array(z.string()),
+  sourceId: z.string().optional()
+});
+
 export const ChildSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
@@ -17,6 +27,10 @@ export const CalendarEventSchema = z.object({
   end: z.string(),
   location: z.string().optional(),
   notes: z.string().optional(),
+  allDay: z.boolean().optional(),
+  timezone: z.string().optional(),
+  sourceUid: z.string().optional(),
+  inference: InferenceMetaSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string()
 });
@@ -35,6 +49,8 @@ export const ExpenseSchema = z.object({
   receiptText: z.string().optional(),
   receiptName: z.string().optional(),
   notes: z.string().optional(),
+  sourceRow: z.number().int().positive().optional(),
+  inference: InferenceMetaSchema.optional(),
   createdAt: z.string()
 });
 
@@ -47,6 +63,8 @@ export const MessageRecordSchema = z.object({
   subject: z.string().optional(),
   body: z.string().min(1),
   tags: z.array(z.string()),
+  actionItems: z.array(z.string()).optional(),
+  inference: InferenceMetaSchema.optional(),
   createdAt: z.string()
 });
 
@@ -61,6 +79,10 @@ export const DocumentRecordSchema = z.object({
   sha256: z.string(),
   dataUrl: z.string(),
   notes: z.string().optional(),
+  documentDate: z.string().optional(),
+  expiryYear: z.number().int().optional(),
+  tags: z.array(z.string()).optional(),
+  inference: InferenceMetaSchema.optional(),
   createdAt: z.string()
 });
 
@@ -72,6 +94,14 @@ export const VaultIdentitySchema = z.object({
 export const LocalLlmSettingsSchema = z.object({
   endpoint: z.string(),
   model: z.string()
+});
+
+export const ActivityRecordSchema = z.object({
+  id: z.string(),
+  occurredAt: z.string(),
+  kind: z.string(),
+  summary: z.string(),
+  sourceId: z.string().optional()
 });
 
 export const VaultStateSchema = z.object({
@@ -86,6 +116,7 @@ export const VaultStateSchema = z.object({
   expenses: z.array(ExpenseSchema),
   messages: z.array(MessageRecordSchema),
   documents: z.array(DocumentRecordSchema),
+  activity: z.array(ActivityRecordSchema).optional(),
   llm: LocalLlmSettingsSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string()
@@ -104,15 +135,26 @@ export const EncryptedVaultSchema = z.object({
     nonce: z.string(),
     ciphertext: z.string()
   }),
+  metadata: z
+    .object({
+      appVersion: z.string(),
+      sourceCommit: z.string(),
+      schemaVersion: z.number(),
+      generatedAt: z.string()
+    })
+    .optional(),
   updatedAt: z.string()
 });
 
+export type ConfidenceLevel = z.infer<typeof ConfidenceLevelSchema>;
+export type InferenceMeta = z.infer<typeof InferenceMetaSchema>;
 export type Child = z.infer<typeof ChildSchema>;
 export type CalendarEvent = z.infer<typeof CalendarEventSchema>;
 export type Expense = z.infer<typeof ExpenseSchema>;
 export type MessageRecord = z.infer<typeof MessageRecordSchema>;
 export type DocumentRecord = z.infer<typeof DocumentRecordSchema>;
 export type VaultIdentity = z.infer<typeof VaultIdentitySchema>;
+export type ActivityRecord = z.infer<typeof ActivityRecordSchema>;
 export type VaultState = z.infer<typeof VaultStateSchema>;
 export type EncryptedVault = z.infer<typeof EncryptedVaultSchema>;
 
@@ -146,6 +188,7 @@ export function createEmptyVault(input: {
     expenses: [],
     messages: [],
     documents: [],
+    activity: [],
     llm: {
       endpoint: "http://127.0.0.1:11434/api/generate",
       model: "llama3.2"

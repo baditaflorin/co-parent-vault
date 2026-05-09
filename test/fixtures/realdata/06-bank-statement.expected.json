@@ -5,7 +5,7 @@
     "merchant": "TARGET T-1234 SCHOOL SUPPLIES, NY",
     "amountCents": 3218,
     "category": "school",
-    "confidence": "medium"
+    "confidence": "high"
   },
   "mustWarnings": ["Positive payment row skipped."]
 }
