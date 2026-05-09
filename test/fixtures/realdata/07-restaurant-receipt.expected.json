@@ -1,0 +1,10 @@
+{
+  "kind": "receipt-text",
+  "first": {
+    "merchant": "DINER TABLE 12",
+    "amountCents": 1935,
+    "date": "2026-05-08",
+    "confidence": "high"
+  },
+  "mustWarnings": []
+}

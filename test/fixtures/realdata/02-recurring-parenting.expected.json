@@ -1,0 +1,10 @@
+{
+  "kind": "ics",
+  "minDrafts": 6,
+  "first": {
+    "title": "Parenting time exchange",
+    "confidence": "high",
+    "sourceUid": "weekday-exchange@example.test"
+  },
+  "mustWarnings": ["Recurring event expanded into draft occurrences."]
+}

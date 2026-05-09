@@ -1,0 +1,11 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Clinic//EN
+BEGIN:VEVENT
+UID:all-day-checkup@example.test
+DTSTAMP:20260501T120000Z
+DTSTART;VALUE=DATE:20260508
+SUMMARY:Annual checkup paperwork due
+DESCRIPTION:Upload forms before appointment.
+END:VEVENT
+END:VCALENDAR

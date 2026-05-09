@@ -1,0 +1,11 @@
+{
+  "kind": "expense-csv",
+  "minDrafts": 2,
+  "first": {
+    "merchant": "School supplies",
+    "amountCents": 4825,
+    "category": "school",
+    "confidence": "high"
+  },
+  "mustWarnings": []
+}

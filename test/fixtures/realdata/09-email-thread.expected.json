@@ -1,0 +1,11 @@
+{
+  "kind": "message-thread",
+  "minDrafts": 1,
+  "first": {
+    "counterpart": "Jordan Parent",
+    "channel": "email",
+    "subject": "Reimbursement for dental visit",
+    "confidence": "high"
+  },
+  "mustTags": ["reimbursement", "medical"]
+}

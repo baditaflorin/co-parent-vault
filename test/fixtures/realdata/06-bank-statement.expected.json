@@ -1,0 +1,11 @@
+{
+  "kind": "expense-csv",
+  "minDrafts": 2,
+  "first": {
+    "merchant": "TARGET T-1234 SCHOOL SUPPLIES, NY",
+    "amountCents": 3218,
+    "category": "school",
+    "confidence": "medium"
+  },
+  "mustWarnings": ["Positive payment row skipped."]
+}

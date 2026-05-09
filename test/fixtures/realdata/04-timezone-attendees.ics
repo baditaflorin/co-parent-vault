@@ -1,0 +1,18 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+BEGIN:VTIMEZONE
+TZID:America/New_York
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:therapy-20260509@example.test
+DTSTAMP:20260501T090000Z
+DTSTART;TZID=America/New_York:20260509T153000
+DTEND;TZID=America/New_York:20260509T163000
+SUMMARY:Therapy appointment
+ORGANIZER;CN=Clinic:mailto:scheduling@example.test
+ATTENDEE;CN=Alex;ROLE=REQ-PARTICIPANT:mailto:alex@example.test
+ATTENDEE;CN=Jordan;ROLE=REQ-PARTICIPANT:mailto:jordan@example.test
+DESCRIPTION:Bring insurance card.\nConfirm co-pay.
+END:VEVENT
+END:VCALENDAR

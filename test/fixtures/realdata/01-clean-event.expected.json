@@ -1,0 +1,10 @@
+{
+  "kind": "ics",
+  "minDrafts": 1,
+  "first": {
+    "title": "School conference",
+    "confidence": "high",
+    "sourceUid": "school-conference-20260508@example.test"
+  },
+  "mustWarnings": []
+}

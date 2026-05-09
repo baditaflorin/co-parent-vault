@@ -1,0 +1,10 @@
+{
+  "kind": "receipt-text",
+  "first": {
+    "merchant": "KIDS DENTAL CLINIC",
+    "amountCents": 10000,
+    "date": "2026-05-08",
+    "confidence": "high"
+  },
+  "mustWarnings": []
+}

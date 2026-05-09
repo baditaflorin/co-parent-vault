@@ -1,0 +1,8 @@
+KIDS DENTAL CLINIC
+Invoice Date: May 8, 2026
+Patient: Maya
+Procedure charge: $320.00
+Insurance adjustment: -$180.00
+Previous payment: -$40.00
+Patient responsibility: $100.00
+Amount Due: $100.00

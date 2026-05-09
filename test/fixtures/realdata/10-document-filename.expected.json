@@ -1,0 +1,22 @@
+{
+  "kind": "document-filename",
+  "files": [
+    {
+      "fileName": "Maya_2026-04-12_immunization_record.pdf",
+      "kind": "medical",
+      "child": "Maya",
+      "date": "2026-04-12",
+      "confidence": "high"
+    },
+    {
+      "fileName": "IEP-final-signed.pdf",
+      "kind": "school",
+      "confidence": "medium"
+    },
+    {
+      "fileName": "passport_exp_2028.jpg",
+      "kind": "identity",
+      "confidence": "medium"
+    }
+  ]
+}

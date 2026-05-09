@@ -1,0 +1,9 @@
+DINER TABLE 12
+05/08/2026 7:42 PM
+Kids meal          12.00
+Juice               3.00
+Subtotal           15.00
+Tax                 1.35
+Tip                 3.00
+Total              19.35
+VISA               19.35

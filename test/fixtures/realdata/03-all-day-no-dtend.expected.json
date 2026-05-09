@@ -1,0 +1,10 @@
+{
+  "kind": "ics",
+  "minDrafts": 1,
+  "first": {
+    "title": "Annual checkup paperwork due",
+    "confidence": "medium",
+    "allDay": true
+  },
+  "mustWarnings": ["No end time found; treated as one-day all-day event."]
+}
