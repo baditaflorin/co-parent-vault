@@ -1,4 +1,4 @@
-const CACHE_NAME = "co-parent-vault-v0.2.0";
+const CACHE_NAME = "co-parent-vault-v0.2.1";
 const APP_SCOPE = "/co-parent-vault/";
 
 self.addEventListener("install", (event) => {
