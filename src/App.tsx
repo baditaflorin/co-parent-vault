@@ -20,9 +20,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ExpenseReportRow } from "./features/analytics/duckdbReports";
-import { exportEventsToIcs, importEventsFromIcs } from "./features/calendar/ics";
+import { exportEventsToIcs, importEventDraftsFromIcs } from "./features/calendar/ics";
+import { inferDocumentFromFileName } from "./features/documents/inferDocument";
+import { inferExpensesFromCsv } from "./features/expenses/csv";
 import { ocrReceipt } from "./features/expenses/receipt";
 import { summarizeMessages } from "./features/llm/localLlm";
+import { inferMessageThread } from "./features/messages/thread";
 import {
   decryptVault,
   encryptVault,
@@ -47,6 +50,7 @@ import {
   createEmptyVault,
   type DocumentRecord,
   type EncryptedVault,
+  type InferenceMeta,
   type MessageRecord,
   touchVault,
   type VaultState
@@ -77,6 +81,27 @@ function firstChildId(vault: VaultState): string {
   return vault.children[0]?.id ?? "";
 }
 
+function recordActivity(
+  vault: VaultState,
+  kind: string,
+  summary: string,
+  sourceId?: string
+): VaultState {
+  return {
+    ...vault,
+    activity: [
+      ...(vault.activity ?? []),
+      {
+        id: `${Date.now().toString(36)}-${(vault.activity?.length ?? 0) + 1}`,
+        occurredAt: new Date().toISOString(),
+        kind,
+        summary,
+        sourceId
+      }
+    ].slice(-50)
+  };
+}
+
 function App() {
   const queryClient = useQueryClient();
   const encryptedQuery = useQuery({ queryKey: ["encrypted-vault"], queryFn: loadEncryptedVault });
@@ -85,6 +110,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [toast, setToast] = useState<Toast>(null);
   const [saveStatus, setSaveStatus] = useState("Locked");
+  const showDebug = new URLSearchParams(window.location.search).get("debug") === "1";
 
   useEffect(() => {
     if (!toast) {
@@ -267,6 +293,7 @@ function App() {
           )}
         </section>
       </main>
+      {showDebug && <DebugPanel vault={vault} saveStatus={saveStatus} />}
       <ToastView toast={toast} />
     </div>
   );
@@ -688,13 +715,26 @@ function CalendarView(props: {
                   }
                   file
                     .text()
-                    .then((text) => importEventsFromIcs(text, firstChildId(props.vault)))
-                    .then((events) => {
+                    .then((text) => importEventDraftsFromIcs(text, firstChildId(props.vault)))
+                    .then((drafts) => {
+                      const events = drafts.map((draft) => draft.event);
+                      const warningCount = drafts.reduce(
+                        (sum, draft) => sum + draft.warnings.length,
+                        0
+                      );
                       props.updateVault((current) => ({
-                        ...current,
+                        ...recordActivity(
+                          current,
+                          "calendar-import",
+                          `Imported ${events.length} calendar drafts from ${file.name}`,
+                          file.name
+                        ),
                         events: [...current.events, ...events]
                       }));
-                      props.notify("ok", `${events.length} events imported.`);
+                      props.notify(
+                        "ok",
+                        `${events.length} event drafts imported${warningCount ? ` with ${warningCount} review notes` : ""}.`
+                      );
                     })
                     .catch((error: unknown) =>
                       props.notify(
@@ -736,11 +776,19 @@ function CalendarView(props: {
             <div className="rounded-md border border-line p-3" key={event.id}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <strong>{event.title}</strong>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong>{event.title}</strong>
+                    <ConfidenceBadge level={event.inference?.level} />
+                  </div>
                   <p className="text-sm text-slate-600">
                     {childName(props.vault.children, event.childId)} · {formatDateTime(event.start)}
                   </p>
                   {event.location && <p className="text-sm text-slate-600">{event.location}</p>}
+                  {event.inference?.warnings?.map((warning) => (
+                    <p className="text-xs text-clay" key={warning}>
+                      {warning}
+                    </p>
+                  ))}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -779,9 +827,11 @@ function ExpenseView(props: {
 }) {
   const [merchant, setMerchant] = useState("");
   const [amount, setAmount] = useState("");
+  const [expenseCurrency, setExpenseCurrency] = useState("USD");
   const [expenseDate, setExpenseDate] = useState(dateInputValue());
   const [receiptText, setReceiptText] = useState("");
   const [receiptName, setReceiptName] = useState("");
+  const [receiptInference, setReceiptInference] = useState<InferenceMeta | undefined>();
   const [ocrStatus, setOcrStatus] = useState("");
   const [report, setReport] = useState<ExpenseReportRow[]>([]);
 
@@ -808,40 +858,99 @@ function ExpenseView(props: {
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <section className="panel p-5">
-        <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold">New expense</h2>
-          <label className="btn-secondary cursor-pointer">
-            <ReceiptText size={18} aria-hidden /> OCR
-            <input
-              className="sr-only"
-              type="file"
-              accept="image/*,.pdf"
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                if (!file) {
-                  return;
-                }
-                setOcrStatus("Starting OCR");
-                setReceiptName(file.name);
-                ocrReceipt(file, setOcrStatus)
-                  .then((parsed) => {
-                    setMerchant(parsed.merchant);
-                    setAmount((parsed.amountCents / 100).toFixed(2));
-                    setExpenseDate(parsed.date);
-                    setReceiptText(parsed.rawText);
-                    props.notify("ok", "Receipt parsed.");
-                  })
-                  .catch((error: unknown) =>
-                    props.notify(
-                      "error",
-                      error instanceof Error ? error.message : "Receipt OCR failed"
+          <div className="flex flex-wrap gap-2">
+            <label className="btn-secondary cursor-pointer">
+              <Upload size={18} aria-hidden /> CSV
+              <input
+                className="sr-only"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (!file) {
+                    return;
+                  }
+                  file
+                    .text()
+                    .then((text) =>
+                      inferExpensesFromCsv({
+                        text,
+                        childId: firstChildId(props.vault),
+                        paidBy: props.vault.parentName,
+                        splitWith: props.vault.coParentName || "Co-parent"
+                      })
                     )
-                  )
-                  .finally(() => setOcrStatus(""));
-              }}
-            />
-          </label>
+                    .then((drafts) => {
+                      const expenses = drafts
+                        .filter((draft) => draft.expense.amountCents > 0)
+                        .map((draft) => draft.expense);
+                      const warningCount = drafts.reduce(
+                        (sum, draft) => sum + draft.warnings.length,
+                        0
+                      );
+                      props.updateVault((current) => ({
+                        ...recordActivity(
+                          current,
+                          "expense-import",
+                          `Imported ${expenses.length} expense drafts from ${file.name}`,
+                          file.name
+                        ),
+                        expenses: [...current.expenses, ...expenses]
+                      }));
+                      props.notify(
+                        "ok",
+                        `${expenses.length} expense drafts imported${warningCount ? ` with ${warningCount} review notes` : ""}.`
+                      );
+                    })
+                    .catch((error: unknown) =>
+                      props.notify(
+                        "error",
+                        error instanceof Error
+                          ? error.message
+                          : "Expense import failed: check the CSV headers and amounts."
+                      )
+                    );
+                }}
+              />
+            </label>
+            <label className="btn-secondary cursor-pointer">
+              <ReceiptText size={18} aria-hidden /> OCR
+              <input
+                className="sr-only"
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (!file) {
+                    return;
+                  }
+                  setOcrStatus("Starting OCR");
+                  setReceiptName(file.name);
+                  ocrReceipt(file, setOcrStatus)
+                    .then((parsed) => {
+                      setMerchant(parsed.merchant);
+                      setAmount((parsed.amountCents / 100).toFixed(2));
+                      setExpenseCurrency(parsed.currency);
+                      setExpenseDate(parsed.date || dateInputValue());
+                      setReceiptText(parsed.rawText);
+                      setReceiptInference(parsed.inference);
+                      props.notify("ok", `Receipt parsed with ${parsed.confidence} confidence.`);
+                    })
+                    .catch((error: unknown) =>
+                      props.notify(
+                        "error",
+                        error instanceof Error ? error.message : "Receipt OCR failed"
+                      )
+                    )
+                    .finally(() => setOcrStatus(""));
+                }}
+              />
+            </label>
+          </div>
         </div>
+        {receiptInference && <InferenceNote inference={receiptInference} />}
         {ocrStatus && (
           <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-sm">
             {ocrStatus}
@@ -862,7 +971,7 @@ function ExpenseView(props: {
                   childId: formValue(form, "childId") || firstChildId(current),
                   merchant,
                   amountCents: parseMoneyToCents(amount),
-                  currency: "USD",
+                  currency: expenseCurrency,
                   date: expenseDate,
                   category: formValue(form, "category") || "childcare",
                   paidBy: formValue(form, "paidBy") || current.parentName,
@@ -870,6 +979,7 @@ function ExpenseView(props: {
                   status: "open",
                   receiptText,
                   receiptName,
+                  inference: receiptInference,
                   notes: formValue(form, "notes"),
                   createdAt: now
                 }
@@ -877,8 +987,10 @@ function ExpenseView(props: {
             }));
             setMerchant("");
             setAmount("");
+            setExpenseCurrency("USD");
             setReceiptText("");
             setReceiptName("");
+            setReceiptInference(undefined);
             event.currentTarget.reset();
           }}
         >
@@ -976,7 +1088,10 @@ function ExpenseView(props: {
             <div className="rounded-md border border-line p-3" key={expense.id}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <strong>{expense.merchant}</strong>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong>{expense.merchant}</strong>
+                    <ConfidenceBadge level={expense.inference?.level} />
+                  </div>
                   <p className="text-sm text-slate-600">
                     {childName(props.vault.children, expense.childId)} · {formatDate(expense.date)}{" "}
                     · {expense.category}
@@ -984,6 +1099,11 @@ function ExpenseView(props: {
                   {expense.receiptName && (
                     <p className="text-xs text-slate-500">Receipt: {expense.receiptName}</p>
                   )}
+                  {expense.inference?.warnings?.map((warning) => (
+                    <p className="text-xs text-clay" key={warning}>
+                      {warning}
+                    </p>
+                  ))}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold">
@@ -1022,6 +1142,7 @@ function MessagesView(props: {
 }) {
   const [summary, setSummary] = useState("");
   const [busy, setBusy] = useState(false);
+  const [threadText, setThreadText] = useState("");
 
   async function runSummary() {
     setBusy(true);
@@ -1044,6 +1165,42 @@ function MessagesView(props: {
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <section className="panel p-5">
         <h2 className="mb-4 text-lg font-bold">New archive record</h2>
+        <div className="mb-4 grid gap-2 rounded-md border border-line p-3">
+          <textarea
+            className="field min-h-24"
+            value={threadText}
+            onChange={(event) => setThreadText(event.target.value)}
+            placeholder="Paste email or SMS thread"
+          />
+          <button
+            className="btn-secondary w-fit"
+            type="button"
+            onClick={() => {
+              const draft = inferMessageThread({
+                text: threadText,
+                childId: firstChildId(props.vault),
+                fallbackCounterpart: props.vault.coParentName || "Co-parent"
+              });
+              props.updateVault((current) => ({
+                ...recordActivity(
+                  current,
+                  "archive-import",
+                  `Imported archive draft for ${draft.message.counterpart}`,
+                  draft.message.inference?.sourceId
+                ),
+                messages: [...current.messages, draft.message]
+              }));
+              setThreadText("");
+              props.notify(
+                "ok",
+                `Archive draft added with ${draft.message.inference?.level ?? "low"} confidence.`
+              );
+            }}
+            disabled={!threadText.trim()}
+          >
+            <Sparkles size={18} aria-hidden /> Infer archive draft
+          </button>
+        </div>
         <form
           className="grid gap-3"
           onSubmit={(event) => {
@@ -1155,7 +1312,10 @@ function MessagesView(props: {
             <div className="rounded-md border border-line p-3" key={message.id}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <strong>{message.subject || message.channel}</strong>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong>{message.subject || message.channel}</strong>
+                    <ConfidenceBadge level={message.inference?.level} />
+                  </div>
                   <p className="text-sm text-slate-600">
                     {childName(props.vault.children, message.childId)} ·{" "}
                     {formatDateTime(message.occurredAt)} · {message.counterpart}
@@ -1163,6 +1323,12 @@ function MessagesView(props: {
                 </div>
                 <span className="pill">{message.channel}</span>
               </div>
+              {message.tags.length > 0 && (
+                <p className="mt-2 text-xs text-slate-600">Tags: {message.tags.join(", ")}</p>
+              )}
+              {message.actionItems && message.actionItems.length > 0 && (
+                <p className="mt-1 text-xs text-clay">Action: {message.actionItems[0]}</p>
+              )}
               <p className="mt-2 whitespace-pre-wrap text-sm">{message.body}</p>
             </div>
           )}
@@ -1178,6 +1344,9 @@ function DocumentsView(props: {
   notify: (kind: "ok" | "error", message: string) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
+  const [documentName, setDocumentName] = useState("");
+  const [documentKind, setDocumentKind] = useState<DocumentRecord["kind"]>("medical");
+  const [documentInference, setDocumentInference] = useState<InferenceMeta | undefined>();
 
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
@@ -1199,20 +1368,36 @@ function DocumentsView(props: {
                   id: crypto.randomUUID(),
                   childId: formValue(form, "childId") || firstChildId(props.vault),
                   name: formValue(form, "name") || file.name,
-                  kind: formValue(form, "kind") as DocumentRecord["kind"],
+                  kind: documentKind,
                   fileName: file.name,
                   mimeType: file.type || "application/octet-stream",
                   size: file.size,
                   sha256,
                   dataUrl,
                   notes: formValue(form, "notes"),
+                  documentDate: documentInference?.reasons.some((reason) =>
+                    /document date/.test(reason)
+                  )
+                    ? inferDocumentFromFileName(file.name, props.vault.children).documentDate
+                    : undefined,
+                  expiryYear: inferDocumentFromFileName(file.name, props.vault.children).expiryYear,
+                  tags: inferDocumentFromFileName(file.name, props.vault.children).tags,
+                  inference: documentInference,
                   createdAt: now
                 };
                 props.updateVault((current) => ({
-                  ...current,
+                  ...recordActivity(
+                    current,
+                    "document-store",
+                    `Stored ${record.kind} document ${record.fileName}`,
+                    record.sha256
+                  ),
                   documents: [...current.documents, record]
                 }));
                 setFile(null);
+                setDocumentName("");
+                setDocumentKind("medical");
+                setDocumentInference(undefined);
                 event.currentTarget.reset();
                 props.notify("ok", "Document stored.");
               })
@@ -1222,8 +1407,20 @@ function DocumentsView(props: {
           }}
         >
           <ChildSelect children={props.vault.children} />
-          <input className="field" name="name" placeholder="Document name" />
-          <select className="field" name="kind" defaultValue="medical">
+          {documentInference && <InferenceNote inference={documentInference} />}
+          <input
+            className="field"
+            name="name"
+            value={documentName}
+            onChange={(event) => setDocumentName(event.target.value)}
+            placeholder="Document name"
+          />
+          <select
+            className="field"
+            name="kind"
+            value={documentKind}
+            onChange={(event) => setDocumentKind(event.target.value as DocumentRecord["kind"])}
+          >
             <option value="medical">Medical</option>
             <option value="school">School</option>
             <option value="travel">Travel</option>
@@ -1234,7 +1431,27 @@ function DocumentsView(props: {
           <input
             className="field"
             type="file"
-            onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
+            onChange={(event) => {
+              const selected = event.currentTarget.files?.[0] ?? null;
+              setFile(selected);
+              if (selected) {
+                const inferred = inferDocumentFromFileName(selected.name, props.vault.children);
+                setDocumentName(inferred.name);
+                setDocumentKind(inferred.kind);
+                setDocumentInference({
+                  level: inferred.confidence,
+                  score:
+                    inferred.confidence === "high"
+                      ? 0.9
+                      : inferred.confidence === "medium"
+                        ? 0.65
+                        : 0.35,
+                  reasons: inferred.reasons,
+                  warnings: inferred.warnings,
+                  sourceId: selected.name
+                });
+              }
+            }}
           />
           <textarea className="field min-h-24" name="notes" placeholder="Notes" />
           <button className="btn-primary" type="submit">
@@ -1252,11 +1469,17 @@ function DocumentsView(props: {
             <div className="rounded-md border border-line p-3" key={document.id}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <strong>{document.name}</strong>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong>{document.name}</strong>
+                    <ConfidenceBadge level={document.inference?.level} />
+                  </div>
                   <p className="text-sm text-slate-600">
                     {childName(props.vault.children, document.childId)} · {document.kind} ·{" "}
                     {Math.round(document.size / 1024)} KB
                   </p>
+                  {document.documentDate && (
+                    <p className="text-xs text-slate-500">Document date: {document.documentDate}</p>
+                  )}
                   <p className="break-all text-xs text-slate-500">sha256 {document.sha256}</p>
                 </div>
                 <button
@@ -1419,6 +1642,56 @@ function RecordList<T>(props: { items: T[]; empty: string; render: (item: T) => 
     );
   }
   return <div className="grid gap-2">{props.items.map(props.render)}</div>;
+}
+
+function ConfidenceBadge(props: { level?: "high" | "medium" | "low" }) {
+  if (!props.level) {
+    return null;
+  }
+  const color =
+    props.level === "high"
+      ? "border-teal-200 bg-teal-50 text-teal-800"
+      : props.level === "medium"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-rose-200 bg-rose-50 text-rose-800";
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${color}`}>
+      {props.level}
+    </span>
+  );
+}
+
+function InferenceNote(props: { inference: InferenceMeta }) {
+  return (
+    <div className="rounded-md border border-line bg-slate-50 p-3 text-xs text-slate-700">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <span className="font-semibold">Inference</span>
+        <ConfidenceBadge level={props.inference.level} />
+      </div>
+      {props.inference.reasons.length > 0 && <p>{props.inference.reasons.join("; ")}</p>}
+      {props.inference.warnings.map((warning) => (
+        <p className="text-clay" key={warning}>
+          {warning}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function DebugPanel(props: { vault: VaultState; saveStatus: string }) {
+  return (
+    <aside className="fixed bottom-4 left-4 z-40 max-w-sm rounded-md border border-line bg-white p-3 text-xs shadow-soft">
+      <p className="font-bold">Debug</p>
+      <p>version {__APP_VERSION__}</p>
+      <p>commit {__COMMIT_SHA__}</p>
+      <p>save {props.saveStatus}</p>
+      <p>
+        records {props.vault.events.length}/{props.vault.expenses.length}/
+        {props.vault.messages.length}/{props.vault.documents.length}
+      </p>
+      <p>activity {(props.vault.activity ?? []).length}</p>
+    </aside>
+  );
 }
 
 function ToastView(props: { toast: Toast }) {

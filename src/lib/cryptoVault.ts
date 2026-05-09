@@ -69,6 +69,12 @@ export async function encryptVault(vault: VaultState, passphrase: string): Promi
       nonce: bytesToBase64(nonce),
       ciphertext: bytesToBase64(ciphertext)
     },
+    metadata: {
+      appVersion: __APP_VERSION__,
+      sourceCommit: __COMMIT_SHA__,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      generatedAt: new Date().toISOString()
+    },
     updatedAt: new Date().toISOString()
   };
 }
