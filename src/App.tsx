@@ -473,12 +473,15 @@ function VaultGate(props: {
               <Upload size={18} aria-hidden /> Import
             </button>
           </form>
-          <div className="mt-5 space-y-2 text-sm text-slate-700">
-            <p>Repo: {__REPO_URL__}</p>
-            <p>Support: {__PAYPAL_URL__}</p>
-            <p>
-              Version {__APP_VERSION__}, commit {__COMMIT_SHA__}
-            </p>
+          <div className="mt-5 flex flex-wrap items-center gap-2 text-sm text-slate-700">
+            <a className="btn-secondary" href={__REPO_URL__} target="_blank" rel="noreferrer">
+              <Github size={18} aria-hidden /> GitHub
+            </a>
+            <a className="btn-secondary" href={__PAYPAL_URL__} target="_blank" rel="noreferrer">
+              <HeartHandshake size={18} aria-hidden /> PayPal
+            </a>
+            <span className="pill">v{__APP_VERSION__}</span>
+            <span className="pill">commit {__COMMIT_SHA__}</span>
           </div>
         </aside>
       </div>

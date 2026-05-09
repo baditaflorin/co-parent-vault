@@ -1,6 +1,6 @@
 {
   "name": "co-parent-vault",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Private local-first co-parenting tools for calendars, expenses, documents, and communication archives.",
   "type": "module",
