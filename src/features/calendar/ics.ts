@@ -19,6 +19,41 @@ function escapeIcsText(value: string): string {
     .replace(/;/g, "\\;");
 }
 
+// RFC 5545 section 3.1 requires content lines longer than 75 octets to be
+// folded: split into multiple physical lines joined with CRLF + a single
+// space. Octets are counted as UTF-8 bytes, not JS characters, so emoji or
+// accented text need byte-aware splitting.
+const ICS_FOLD_LIMIT_OCTETS = 75;
+const utf8Encoder = new TextEncoder();
+
+function foldIcsLine(line: string): string {
+  const bytes = utf8Encoder.encode(line);
+  if (bytes.length <= ICS_FOLD_LIMIT_OCTETS) {
+    return line;
+  }
+
+  const decoder = new TextDecoder("utf-8");
+  const segments: string[] = [];
+  let cursor = 0;
+  let firstSegment = true;
+  while (cursor < bytes.length) {
+    // The continuation line allows 75 octets of content; the first line gets
+    // the full 75. Continuation prefix (" ") is a single-byte space.
+    const limit = firstSegment ? ICS_FOLD_LIMIT_OCTETS : ICS_FOLD_LIMIT_OCTETS - 1;
+    let end = Math.min(cursor + limit, bytes.length);
+
+    // Avoid splitting a UTF-8 multi-byte sequence. Walk back until we land on
+    // a continuation byte boundary (top two bits != 10).
+    while (end > cursor && end < bytes.length && (bytes[end] & 0xc0) === 0x80) {
+      end -= 1;
+    }
+    segments.push(decoder.decode(bytes.subarray(cursor, end)));
+    cursor = end;
+    firstSegment = false;
+  }
+  return segments.join("\r\n ");
+}
+
 function toIcsDate(value: string): string {
   return new Date(value)
     .toISOString()
@@ -66,7 +101,7 @@ export function exportEventsToIcs(events: CalendarEvent[], children: Child[]): s
   }
 
   lines.push("END:VCALENDAR");
-  return `${lines.join("\r\n")}\r\n`;
+  return `${lines.map(foldIcsLine).join("\r\n")}\r\n`;
 }
 
 export function importEventsFromIcs(text: string, fallbackChildId: string): CalendarEvent[] {
